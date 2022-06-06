@@ -19,6 +19,18 @@ npm install
 
 `pm2 start bot.js`
 
+## Usage
+
+```
+Here is the list of commands I understand:
+  !help - displays this message
+  !list - list your subscriptions
+  !format json|pretty - set your message format
+  !interval [3600] - get|set message interval (seconds)
+  !sub <validator stash> - subscribe to alerts
+  !unsub - unsubscribe from alerts
+```
+
 ## References
 
 - https://polkadot.network/blog/join-kusamas-thousand-validators-programme/
