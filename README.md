@@ -23,3 +23,7 @@ npm install
 
 - https://polkadot.network/blog/join-kusamas-thousand-validators-programme/
 - 1KV Status from https://kusama.w3f.community/candidates
+
+## Example messages
+
+![image](https://user-images.githubusercontent.com/1845970/172218717-65e69252-9cb4-4cee-a92e-95d3679a0ad7.png)
