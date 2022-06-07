@@ -27,8 +27,10 @@ Here is the list of commands I understand:
   !list - list your subscriptions
   !format json|pretty - set your message format
   !interval [3600] - get|set message interval (seconds)
+  !once <validator stash> - get data once
   !sub <validator stash> - subscribe to alerts
-  !unsub - unsubscribe from alerts
+  !unsub <validator stash> - unsubscribe from alerts
+  !leave - remove all data
 ```
 
 ## References

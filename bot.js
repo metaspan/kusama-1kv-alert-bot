@@ -36,7 +36,9 @@ const helpText = 'Here is the list of commands I understand:\n'
     + '  `!format json|pretty` - set your message format\n'
     + '  `!interval [3600]` - get|set message interval (seconds)\n'
     + '  `!sub` <validator stash> - subscribe to alerts\n'
+    + '  `!once` <validator stash> - get data once\n'
     + '  `!unsub` <validator stash> - unsubscribe from alerts\n'
+    + '  `!leave` - remove all data\n'
     // + '   - modules: valid | active | all\n'
 
 function handleMessage (msg) {
@@ -48,6 +50,7 @@ function handleMessage (msg) {
     // console.debug(`"${cmd}" "${module}" "${stash}"`)
     let stash
     let idx
+    let c, sub
     switch (cmd) {
         case '!ping':
             bot.createMessage(msg.channel.id, 'Pong!')
@@ -59,7 +62,12 @@ function handleMessage (msg) {
             let s = state.subscribers.find(f => f.id === msg.author.id)
             let message = s ? JSON.stringify(s.targets) : 'None' 
             bot.createMessage(msg.channel.id, message)
-            break;
+            break
+        case '!leave':
+            state.subscribers = state.subscribers.filter(f => f.id !== msg.author.id)
+            saveState()
+            bot.createMessage(msg.channel.id, `ok, bye`)
+            break
         case '!interval':
             idx = state.subscribers.findIndex(s => s.id === msg.author.id)
             if (idx > -1) {
@@ -75,14 +83,36 @@ function handleMessage (msg) {
             } else {
                 bot.createMessage(msg.channel.id, `every 3600 seconds.`)
             }
-            break;
+            break
         case '!format':
             idx = state.subscribers.findIndex(s => s.id === msg.author.id)
-            let format = parts[1]
-            state.subscribers[idx].format = (format === 'json') ? 'json' : 'pretty'
+            let format = (parts[1] === 'json') ? 'json' : 'pretty'
+            if (idx > -1) {
+                state.subscribers[idx].format = format
+            } else {
+                state.subscribers.push({id: msg.author.id, format: format })
+            }
             saveState()
-            bot.createMessage(msg.channel.id, `you will receive messages in '${state.subscribers[idx].format}' format`)
-            break;
+            bot.createMessage(msg.channel.id, `you will receive messages in '${format}' format`)
+            break
+        case '!once':
+            stash = parts[1]
+            if (!stash || stash === '') {
+                bot.createMessage(msg.channel.id, `invalid stash '${stash||''}'\ntry !once <stash>`)
+                return
+            }
+            c = state.candidates.find(f => f.stash === stash)
+            if (c) {
+                sub = state.subscribers.find(f => f.id === msg.author.id)
+                if (sub === undefined) sub = {}
+                let message = sub.format === 'json'
+                    ? JSON.stringify({ name: c.name, stash: c.stash, active: c.active, valid: c.valid})
+                    : `${c.name} active: ${c.active ? '🔥' : '💀'}  valid: ${c.valid ? '🟢' : '🔴'}`
+                bot.createMessage(msg.channel.id, message)
+            } else {
+                bot.createMessage(msg.channel.id, `${stash} not found. Is this a 1kv validator?`)
+            }
+            break
         case '!sub':
             // if (!['valid','active','all'].includes(module)) {
             //     bot.createMessage(msg.channel.id, `invalid module '${module||''}'\ntry !sub <module> <stash>`)
