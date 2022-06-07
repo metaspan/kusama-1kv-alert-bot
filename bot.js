@@ -35,17 +35,18 @@ const helpText = 'Here is the list of commands I understand:\n'
     + '  `!list` - list your subscriptions\n'
     + '  `!format json|pretty` - set your message format\n'
     + '  `!interval [3600]` - get|set message interval (seconds)\n'
-    + '  `!sub` <module> <validator stash> - subscribe to alerts\n'
-    + '  `!unsub` <module> - unsubscribe from alerts\n'
-    + '   - modules: valid | active | all\n'
+    + '  `!sub` <validator stash> - subscribe to alerts\n'
+    + '  `!unsub` <validator stash> - unsubscribe from alerts\n'
+    // + '   - modules: valid | active | all\n'
 
 function handleMessage (msg) {
     // const cmd = msg.content.substring(0, str.indexOf(' '))
     const parts = msg.content.split(' ')
     const cmd = parts[0] //.substr(PREFIX.length)
-    const module = parts[1]
-    const stash = parts[2]
-    console.debug(`"${cmd}" "${module}" "${stash}"`)
+    // const module = parts[1]
+    // const stash = parts[2]
+    // console.debug(`"${cmd}" "${module}" "${stash}"`)
+    let stash
     let idx
     switch (cmd) {
         case '!ping':
@@ -83,12 +84,13 @@ function handleMessage (msg) {
             bot.createMessage(msg.channel.id, `you will receive messages in '${state.subscribers[idx].format}' format`)
             break;
         case '!sub':
-            if (!['valid','active','all'].includes(module)) {
-                bot.createMessage(msg.channel.id, `invalid module '${module||''}'\ntry !sub <module> <stash>`)
-                return
-            }
+            // if (!['valid','active','all'].includes(module)) {
+            //     bot.createMessage(msg.channel.id, `invalid module '${module||''}'\ntry !sub <module> <stash>`)
+            //     return
+            // }
+            stash = parts[1]
             if (!stash || stash === '') {
-                bot.createMessage(msg.channel.id, `invalid stash '${stash||''}'\ntry !sub <module> <stash>`)
+                bot.createMessage(msg.channel.id, `invalid stash '${stash||''}'\ntry !sub <stash>`)
                 return
             }
             idx = state.subscribers.findIndex(s => s.id === msg.author.id)
@@ -98,19 +100,20 @@ function handleMessage (msg) {
                     bot.createMessage(msg.channel.id, `already subscribed to ${stash}`)
                 } else {
                     state.subscribers[idx].targets.push({stash: stash})
-                    bot.createMessage(msg.channel.id, `subscribed to ${module} for ${stash}`)
+                    bot.createMessage(msg.channel.id, `subscribed to ${stash}`)
                 }
             } else {
                 state.subscribers.push({id: msg.author.id, interval: 3600, channel: msg.channel, targets: [{stash: stash}]})
-                bot.createMessage(msg.channel.id, `subscribed to ${module} for ${stash}`)
+                bot.createMessage(msg.channel.id, `subscribed to ${stash}`)
             }
             saveState()
             break
         case '!unsub':
-            if (!['valid','active','all'].includes(module)) {
-                bot.createMessage(msg.channel.id, `invalid module '${module||''}'\ntry !unsub <module> <stash>`)
-                return
-            }
+            // if (!['valid','active','all'].includes(module)) {
+            //     bot.createMessage(msg.channel.id, `invalid module '${module||''}'\ntry !unsub <module> <stash>`)
+            //     return
+            // }
+            stash = parts[1]
             if (!stash || stash === '') {
                 bot.createMessage(msg.channel.id, `invalid stash '${stash||''}'\ntry !unsub <module> <stash>`)
                 return
