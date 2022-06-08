@@ -1,7 +1,8 @@
-import {Client} from 'eris'
+import { Client } from 'eris'
 import axios from 'axios'
 import moment from 'moment-timezone'
 import fs from 'fs'
+import { ApiPromise, WsProvider } from '@polkadot/api'
 
 import config from './config.js'
 // console.log(config)
@@ -22,6 +23,25 @@ import state from './state.json' assert { type: 'json' }
 function saveState() {
     fs.writeFileSync('state.json', JSON.stringify(state, null, 4), 'utf8')
 }
+
+function slog(text) {
+    console.debug(`[DEBUG] ${moment().format('YYYYMMDD HHmmss')}: ${text}`)
+}
+
+function composeStatusMessage(subscriber, candidate) {
+    let message = subscriber.format === 'json'
+        ? JSON.stringify({
+            name: candidate.name,
+            stash: candidate.stash,
+            active: candidate.active,
+            valid: candidate.valid,
+            queued: candidate.queued?true:false,
+            moment: moment()
+        })
+        : `${candidate.name} active: ${candidate.active ? '🚀' : '💀'}  valid: ${candidate.valid ? '👌' : '🛑'} queued: ${candidate.queued ? '⏭️' : '⏸️'}`
+    return message
+}
+
 // Create a Client instance with our bot token.
 const bot = new Client(config.bot_token)
 
@@ -39,6 +59,7 @@ const helpText = 'Here is the list of commands I understand:\n'
     + '  `!once` <validator stash> - get data once\n'
     + '  `!unsub` <validator stash> - unsubscribe from alerts\n'
     + '  `!leave` - remove all data\n'
+    + '  `!ping` - test response\n'
     // + '   - modules: valid | active | all\n'
 
 function handleMessage (msg) {
@@ -85,8 +106,8 @@ function handleMessage (msg) {
             }
             break
         case '!format':
-            idx = state.subscribers.findIndex(s => s.id === msg.author.id)
             let format = (parts[1] === 'json') ? 'json' : 'pretty'
+            idx = state.subscribers.findIndex(s => s.id === msg.author.id)
             if (idx > -1) {
                 state.subscribers[idx].format = format
             } else {
@@ -105,10 +126,11 @@ function handleMessage (msg) {
             if (c) {
                 sub = state.subscribers.find(f => f.id === msg.author.id)
                 if (sub === undefined) sub = {}
-                let message = sub.format === 'json'
-                    ? JSON.stringify({ name: c.name, stash: c.stash, active: c.active, valid: c.valid})
-                    : `${c.name} active: ${c.active ? '🔥' : '💀'}  valid: ${c.valid ? '🟢' : '🔴'}`
+                let message = composeStatusMessage(sub, c)
                 bot.createMessage(msg.channel.id, message)
+                if (!c.valid) {
+                    bot.createMessage(sub.channel.id, JSON.stringify(c.validity.filter(f => !f.valid), null, 4))
+                }
             } else {
                 bot.createMessage(msg.channel.id, `${stash} not found. Is this a 1kv validator?`)
             }
@@ -154,7 +176,7 @@ function handleMessage (msg) {
                 bot.createMessage(msg.channel.id, `unsubscribed for ${stash}`)   
                 saveState()
             } else {
-                console.debug('could not find idx')
+                slog('could not find idx')
             }
             break
         default:
@@ -171,13 +193,13 @@ bot.on('messageCreate', async (msg) => {
     )
  
     if (msg.author.id === ""+config.app_id) {
-        console.debug('Ignore response from self...')
+        slog('Ignore response from self...')
         return
     } else if (msg.channel.guild && botWasMentioned) {
         await bot.createMessage(msg.channel.id, `@${msg.author.username}, not here... please use DM`)
         return;
     } else {
-        console.debug(msg)
+        slog(msg)
     }
 
     if (msg.content.slice(0, 1) === '!') {
@@ -198,8 +220,16 @@ bot.on('error', err => {
 });
 
 setInterval(async () => {
-    if (!state.updatedAt || moment().diff(state.updatedAt, 'seconds') > 60) {
-        console.debug('Updating candidates...')
+    slog('=== Interval starts...')
+    // do we have any subscribers that need updated candidates data?
+    var refreshNeeded = state.subscribers.findIndex(sub => {
+        let age = moment().diff(moment(sub.updatedAt), 'seconds')
+        return (age > sub.interval)
+    })
+    // if (!state.updatedAt || moment().diff(state.updatedAt, 'seconds') > 60) {
+    slog(`refreshNeeded = ${refreshNeeded}`)
+    if (refreshNeeded > -1 && moment().diff(state.updatedAt, 'seconds') > 60) { // 10 mins should be fresh enough
+        slog('Updating candidates...')
         try {
             const res = await axios.get('https://kusama.w3f.community/candidates')
             if (res.data) {
@@ -207,25 +237,42 @@ setInterval(async () => {
                 state.updatedAt = moment()
                 saveState()
             } else {
-                console.debug(res)
+                slog(res)
             }
         } catch (err) {
             console.debug(err)
         }
+        // check if candidates are queued for next session
+        slog('Checking if queued for next session')
+        try {
+            const wsProvider = new WsProvider('wss://kusama-rpc.polkadot.io')
+            const api = await ApiPromise.create({ provider: wsProvider })
+            const keys = await api.query.session.queuedKeys()
+            keys.forEach((k, idx) => {
+                const stash = k.toJSON()[0]
+                idx = state.candidates.findIndex(f => f.stash === stash)
+                if (idx > -1) {
+                    state.candidates[idx].queued = true
+                }
+            })
+        } catch (err) {
+            console.debug(err)
+        }
     }
-    console.debug('Checking subscribers: '+ state.subscribers.length)
+    slog('Checking subscribers: '+ state.subscribers.length)
     let updated = false
     state.subscribers.forEach((sub, idx) => {
         let age = moment().diff(moment(sub.updatedAt), 'seconds')
-        console.debug('id:', sub.id, 'age:', age, 'updateAt', sub.updatedAt)
-        if (sub.updatedAt === '' || age > sub.interval) {
+        slog(`id: ${sub.id}, age: ${age}, updateAt ${sub.updatedAt}`)
+        if (sub.updatedAt === '' || sub.updatedAt === undefined || age > sub.interval) {
             sub.targets.forEach( t => {
                 const c = state.candidates.find(c => c.stash === t.stash)
                 if (c) {
-                    let message = sub.format === 'json'
-                        ? JSON.stringify({ name: c.name, stash: c.stash, active: c.active, valid: c.valid})
-                        : `${c.name} active: ${c.active ? '🔥' : '💀'}  valid: ${c.valid ? '🟢' : '🔴'}`
-                    bot.createMessage(sub.channel.id, moment().format('HH:mm:ss: ') + message)
+                    let message = composeStatusMessage(sub, c)
+                    bot.createMessage(sub.channel.id, message)
+                    if (!c.valid) {
+                        bot.createMessage(sub.channel.id, JSON.stringify(c.validity.filter(f => !f.valid), null, 4))
+                    }
                 }
             })
             state.subscribers[idx].updatedAt = moment()
@@ -233,6 +280,7 @@ setInterval(async () => {
         }
     })
     if (updated) saveState()
+    slog('=== Interval ends...')
 }, INTERVAL)
 
 bot.connect();
