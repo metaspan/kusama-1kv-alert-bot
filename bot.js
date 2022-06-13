@@ -214,13 +214,13 @@ bot.on('messageCreate', async (msg) => {
         await bot.createMessage(msg.channel.id, usage)
     }
 
-})
+});
 
 bot.on('disconnect', (err) => {
     console.warn(err);
-})
+});
 
-bot.on('error', err => {
+bot.on('error', (err) => {
     console.warn(err);
 });
 
@@ -229,7 +229,7 @@ bot.on('error', err => {
   const api = await ApiPromise.create({ provider: wsProvider })
 
   api.query.system.events((events) => {
-    slog(`Received ${events.length} events:`);
+    slog(`Received ${events.length} events:`)
   
     // Loop through the Vec<EventRecord>
     events.forEach((record) => {
@@ -311,11 +311,14 @@ bot.on('error', err => {
         sub.targets.forEach( t => {
           const c = state.candidates.find(c => c.stash === t.stash)
           if (c) {
+            const val_check = c.validity.filter(f => !f.valid)
+            if (!c.valid) {
+              // check validity
+              if (val_check.length == 0) c.valid = true
+            }
             let message = composeStatusMessage(sub, c)
             bot.createMessage(sub.channel.id, message)
-            if (!c.valid) {
-              bot.createMessage(sub.channel.id, JSON.stringify(c.validity.filter(f => !f.valid), null, 4))
-            }
+            if (!c.valid) bot.createMessage(sub.channel.id, JSON.stringify(val_check, null, 4))
           }
         })
         state.subscribers[idx].updatedAt = moment()
@@ -326,6 +329,6 @@ bot.on('error', err => {
     slog('=== Interval ends...')
   }, INTERVAL)
   
-  bot.connect();
+  bot.connect()
 
 })()
