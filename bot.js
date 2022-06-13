@@ -37,8 +37,10 @@ function composeStatusMessage(subscriber, candidate) {
             valid: candidate.valid,
             queued: candidate.queued?true:false,
             moment: moment()
-        })
-        : `${candidate.name} active: ${candidate.active ? '🚀' : '💀'}  valid: ${candidate.valid ? '👌' : '🛑'} queued: ${candidate.queued ? '⏭️' : '⏸️'}`
+        }, {}, 4)
+        : `${candidate.name} \nactive: ${candidate.active ? '🚀' : '💤'} `
+            + `valid: ${candidate.valid ? '👌' : '🛑'} `
+            + `queued: ${candidate.queued ? '⏭️' : '⏸️'}`
     return message
 }
 
@@ -152,11 +154,11 @@ function handleMessage (msg) {
                     bot.createMessage(msg.channel.id, `already subscribed to ${stash}`)
                 } else {
                     state.subscribers[idx].targets.push({stash: stash})
-                    bot.createMessage(msg.channel.id, `subscribed to ${stash}`)
+                    bot.createMessage(msg.channel.id, `subscribed to ${stash}, interval ${state.subscribers[idx].interval} seconds`)
                 }
             } else {
-                state.subscribers.push({id: msg.author.id, interval: 3600, channel: msg.channel, targets: [{stash: stash}]})
-                bot.createMessage(msg.channel.id, `subscribed to ${stash}`)
+                state.subscribers.push({id: msg.author.id, interval: 3600, channel: {id: msg.channel.id}, targets: [{stash: stash}]})
+                bot.createMessage(msg.channel.id, `subscribed to ${stash}, interval 3600 seconds`)
             }
             saveState()
             break
@@ -195,6 +197,9 @@ bot.on('messageCreate', async (msg) => {
     if (msg.author.id === ""+config.app_id) {
         slog('Ignore response from self...')
         return
+    } else if (msg.channel.guild && !botWasMentioned) {
+        slog('Ignore message to guild')
+        return
     } else if (msg.channel.guild && botWasMentioned) {
         await bot.createMessage(msg.channel.id, `@${msg.author.username}, not here... please use DM`)
         return;
@@ -219,68 +224,108 @@ bot.on('error', err => {
     console.warn(err);
 });
 
-setInterval(async () => {
+(async () => {
+  const wsProvider = new WsProvider('ws://localhost:40225')
+  const api = await ApiPromise.create({ provider: wsProvider })
+
+  api.query.system.events((events) => {
+    slog(`Received ${events.length} events:`);
+  
+    // Loop through the Vec<EventRecord>
+    events.forEach((record) => {
+      // Extract the phase, event and the event types
+      const { event, phase } = record
+      const types = event.typeDef
+  
+      // api.events.staking.StakersElected.is
+      if (event.section.toUpperCase() === 'STAKERSELECTED'
+      || event.method.toUpperCase() === 'STAKERSELECTED') {
+      // Show what we are busy with
+      slog(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
+      bot.createMessage(
+        '983358544650858507',
+        'Seems we have Event:'
+          + `at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
+          + `\t${event.section}:${event.method}:: (phase=${phase.toString()})`
+      )
+      // console.log(`\t\t${event.meta.documentation?.toString()}`)
+  
+      // Loop through each of the parameters, displaying the type and data
+      event.data.forEach((data, index) => {
+          slog(`\t\t\t${types[index].type}: ${data.toString()}`);
+      })
+      // } else {
+      //   console.log(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
+      }
+    })
+  })
+  
+  setInterval(async () => {
     slog('=== Interval starts...')
     // do we have any subscribers that need updated candidates data?
     var refreshNeeded = state.subscribers.findIndex(sub => {
-        let age = moment().diff(moment(sub.updatedAt), 'seconds')
-        return (age > sub.interval)
+      let age = moment().diff(moment(sub.updatedAt), 'seconds')
+      return (age > sub.interval)
     })
     // if (!state.updatedAt || moment().diff(state.updatedAt, 'seconds') > 60) {
     slog(`refreshNeeded = ${refreshNeeded}`)
     if (refreshNeeded > -1 && moment().diff(state.updatedAt, 'seconds') > 60) { // 10 mins should be fresh enough
-        slog('Updating candidates...')
-        try {
-            const res = await axios.get('https://kusama.w3f.community/candidates')
-            if (res.data) {
-                state.candidates = res.data
-                state.updatedAt = moment()
-                saveState()
-            } else {
-                slog(res)
-            }
-        } catch (err) {
-            console.debug(err)
+      slog('Updating candidates...')
+      try {
+        const res = await axios.get('https://kusama.w3f.community/candidates')
+        if (res.data) {
+          state.candidates = res.data
+          state.updatedAt = moment()
+          saveState()
+        } else {
+          slog(res)
         }
-        // check if candidates are queued for next session
-        slog('Checking if queued for next session')
-        try {
-            const wsProvider = new WsProvider('wss://kusama-rpc.polkadot.io')
-            const api = await ApiPromise.create({ provider: wsProvider })
-            const keys = await api.query.session.queuedKeys()
-            keys.forEach((k, idx) => {
-                const stash = k.toJSON()[0]
-                idx = state.candidates.findIndex(f => f.stash === stash)
-                if (idx > -1) {
-                    state.candidates[idx].queued = true
-                }
-            })
-        } catch (err) {
-            console.debug(err)
-        }
+      } catch (err) {
+        console.debug(err)
+      }
+      // check if candidates are queued for next session
+      slog('Checking if queued for next session')
+      try {
+        // const wsProvider = new WsProvider('wss://kusama-rpc.polkadot.io')
+        const wsProvider = new WsProvider('ws://localhost:40225')
+        const api = await ApiPromise.create({ provider: wsProvider })
+        const keys = await api.query.session.queuedKeys()
+        keys.forEach((k, idx) => {
+          const stash = k.toJSON()[0]
+          idx = state.candidates.findIndex(f => f.stash === stash)
+          if (idx > -1) {
+            state.candidates[idx].queued = true
+          }
+        })
+        await api.disconnect()
+      } catch (err) {
+        console.debug(err)
+      }
     }
     slog('Checking subscribers: '+ state.subscribers.length)
     let updated = false
     state.subscribers.forEach((sub, idx) => {
-        let age = moment().diff(moment(sub.updatedAt), 'seconds')
-        slog(`id: ${sub.id}, age: ${age}, updateAt ${sub.updatedAt}`)
-        if (sub.updatedAt === '' || sub.updatedAt === undefined || age > sub.interval) {
-            sub.targets.forEach( t => {
-                const c = state.candidates.find(c => c.stash === t.stash)
-                if (c) {
-                    let message = composeStatusMessage(sub, c)
-                    bot.createMessage(sub.channel.id, message)
-                    if (!c.valid) {
-                        bot.createMessage(sub.channel.id, JSON.stringify(c.validity.filter(f => !f.valid), null, 4))
-                    }
-                }
-            })
-            state.subscribers[idx].updatedAt = moment()
-            updated = true
-        }
+      let age = moment().diff(moment(sub.updatedAt), 'seconds')
+      slog(`id: ${sub.id}, age: ${age}, updateAt ${sub.updatedAt}`)
+      if (sub.updatedAt === '' || sub.updatedAt === undefined || age > sub.interval) {
+        sub.targets.forEach( t => {
+          const c = state.candidates.find(c => c.stash === t.stash)
+          if (c) {
+            let message = composeStatusMessage(sub, c)
+            bot.createMessage(sub.channel.id, message)
+            if (!c.valid) {
+              bot.createMessage(sub.channel.id, JSON.stringify(c.validity.filter(f => !f.valid), null, 4))
+            }
+          }
+        })
+        state.subscribers[idx].updatedAt = moment()
+        updated = true
+      }
     })
     if (updated) saveState()
     slog('=== Interval ends...')
-}, INTERVAL)
+  }, INTERVAL)
+  
+  bot.connect();
 
-bot.connect();
+})()
