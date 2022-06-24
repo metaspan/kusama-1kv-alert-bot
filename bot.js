@@ -6,7 +6,7 @@ import { ApiPromise, WsProvider } from '@polkadot/api'
 
 import config from './config.js'
 // console.log(config)
-const INTERVAL = 15 * 1000
+// const INTERVAL = 15 * 1000
 
 import state from './state.json' assert { type: 'json' }
 // let exampleState = { 
@@ -272,10 +272,18 @@ bot.on('error', (err) => {
     if (refreshNeeded > -1 && moment().diff(state.updatedAt, 'seconds') > 60) { // 10 mins should be fresh enough
       slog('Updating candidates...')
       try {
-        const res = await axios.get('https://kusama.w3f.community/candidates')
+        // const res = await axios.get('https://kusama.w3f.community/candidates')
+        const res = await axios.get(config.update_url)
         if (res.data) {
-          state.candidates = res.data
-          state.updatedAt = moment()
+          if (res.data.updatedAt) {
+            // we're getting from our own cache
+            state.candidates = res.data.candidates
+            state.updatedAt = res.data.updatedAt
+          } else {
+            // we're getting from upstream
+            state.candidates = res.data
+            state.updatedAt = moment()  
+          }
           saveState()
         } else {
           slog(res)
@@ -327,7 +335,7 @@ bot.on('error', (err) => {
     })
     if (updated) saveState()
     slog('=== Interval ends...')
-  }, INTERVAL)
+  }, config.update_interval)
   
   bot.connect()
 
