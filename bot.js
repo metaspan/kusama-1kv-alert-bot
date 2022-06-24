@@ -3,6 +3,7 @@ import axios from 'axios'
 import moment from 'moment-timezone'
 import fs from 'fs'
 import { ApiPromise, WsProvider } from '@polkadot/api'
+import { Candidate } from './candidate.js'
 
 import config from './config.js'
 // console.log(config)
@@ -309,11 +310,22 @@ bot.on('error', (err) => {
       slog(`id: ${sub.id}, age: ${age}, updateAt ${sub.updatedAt}`)
       if (sub.updatedAt === '' || sub.updatedAt === undefined || age > sub.interval) {
         sub.targets.forEach( t => {
-          const c = state.candidates.find(c => c.stash === t.stash)
+          const c = new Candidate(state.candidates.find(c => c.stash === t.stash))
           if (c) {
+            // const wasValid = c.valid
             const val_check = c.validity.filter(f => !f.valid)
             if (!c.valid) {
               // check validity
+              bot.createMessage(
+                '983358544650858507',
+                'INVALID: '
+                + '- ' + moment().format('YYYY.MM.DD HH:mm:ss') + ': \n'
+                + '- ' + c.stash + ' \n'
+                + JSON.stringify(c.valid) + ' \n'
+                + JSON.stringify(c.validity) + ' \n'
+                + JSON.stringify(c.invalidityReasons)
+              )
+        
               if (val_check.length == 0) c.valid = true
             }
             let message = composeStatusMessage(sub, c)
