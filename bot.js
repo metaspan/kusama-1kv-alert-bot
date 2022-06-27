@@ -290,6 +290,7 @@ bot.on('error', (err) => {
           slog(res)
         }
       } catch (err) {
+        slog('AXIOS error: ' + JSON.stringify(err.res ? err.res : err))
         console.debug(err)
       }
       // check if candidates are queued for next session
@@ -320,22 +321,23 @@ bot.on('error', (err) => {
         sub.targets.forEach( t => {
           const c = new Candidate(state.candidates.find(c => c.stash === t.stash))
           if (c) {
-            // const wasValid = c.valid
-            const val_check = c.validity.filter(f => !f.valid)
-            if (!c.valid) {
-              // check validity
-              bot.createMessage(
-                '983358544650858507',
-                'INVALID: '
-                + '- ' + moment().format('YYYY.MM.DD HH:mm:ss') + ': \n'
-                + '- ' + c.stash + ' \n'
-                + JSON.stringify(c.valid) + ' \n'
-                + JSON.stringify(c.validity) + ' \n'
-                + JSON.stringify(c.invalidityReasons)
-              )
+            // // const wasValid = c.valid
+            // const val_check = c.validity.filter(f => !f.valid)
+            // if (!c.valid) {
+            //   // check validity
+            //   bot.createMessage(
+            //     '983358544650858507',
+            //     'INVALID: '
+            //     + '- ' + moment().format('YYYY.MM.DD HH:mm:ss') + ': \n'
+            //     + '- ' + c.stash + ' \n'
+            //     + JSON.stringify(c.valid) + ' \n'
+            //     + JSON.stringify(c.validity) + ' \n'
+            //     + JSON.stringify(c.invalidityReasons)
+            //   )
         
-              if (val_check.length == 0) c.valid = true
-            }
+            //   if (val_check.length == 0) c.valid = true
+            // }
+            c.valid = c.validity.filter(f => !f.valid).length === 0
             let message = composeStatusMessage(sub, c)
             bot.createMessage(sub.channel.id, message)
             if (!c.valid) bot.createMessage(sub.channel.id, JSON.stringify(val_check, null, 4))
