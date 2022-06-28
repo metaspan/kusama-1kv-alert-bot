@@ -322,7 +322,7 @@ bot.on('error', (err) => {
           const c = new Candidate(state.candidates.find(c => c.stash === t.stash))
           if (c) {
             // // const wasValid = c.valid
-            // const val_check = c.validity.filter(f => !f.valid)
+            const val_check = c.validity.filter(f => !f.valid)
             // if (!c.valid) {
             //   // check validity
             //   bot.createMessage(
@@ -337,7 +337,7 @@ bot.on('error', (err) => {
         
             //   if (val_check.length == 0) c.valid = true
             // }
-            c.valid = c.validity.filter(f => !f.valid).length === 0
+            c.valid = val_check.length === 0
             let message = composeStatusMessage(sub, c)
             bot.createMessage(sub.channel.id, message)
             if (!c.valid) bot.createMessage(sub.channel.id, JSON.stringify(val_check, null, 4))
