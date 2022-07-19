@@ -34,12 +34,15 @@ function composeStatusMessage(subscriber, candidate) {
         ? JSON.stringify({
             name: candidate.name,
             stash: candidate.stash,
+            nominated: candidate.nominated,
             active: candidate.active,
             valid: candidate.valid,
             queued: candidate.queued?true:false,
             moment: moment()
         }, {}, 4)
-        : `${candidate.name} \nactive: ${candidate.active ? '🚀' : '💤'} `
+        : `${candidate.name} \n`
+            + `active: ${candidate.active ? '🚀' : '💤'} `
+            + `nominated: ${candidate.nominated ? '💰' : '🫙'} `
             + `valid: ${candidate.valid ? '👌' : '🛑'} `
             + `queued: ${candidate.queued ? '⏭️' : '⏸️'}`
     return message
@@ -239,6 +242,41 @@ bot.on('error', (err) => {
       const types = event.typeDef
   
       // api.events.staking.StakersElected.is
+      if (event.section === 'staking') {
+        if (event.method === 'Rewarded') {
+          const ex = {
+            "index":"0x0701",
+            "data":["144J3aDZgiCZ2X8aiPZ6HKuds3Zn6HNkkSQVNkWtHAgxYae7",3084992450]
+          }
+          const stash = event.data[0]
+          const amount = event.data[1]
+          state.subscribers.forEach(sub => {
+            // const c = state.candidates.find(f => f.stash === stash)
+            if (sub.targets.includes(stash)) {
+              // const t = sub.targets[stash]
+              try {
+                bot.createMessage(
+                  // '994441486575869952',
+                  sub.channel.id,
+                  'staking.Reward:'
+                    + ` at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
+                    + `\t (phase=${phase.toString()})`
+                    + `\t ${event.toString()}`
+                )
+              } catch (err) {
+                bot.createMessage(
+                  // '994441486575869952',
+                  '983358544650858507',
+                  'staking.Reward: ERROR: ' + err.toString()
+                )
+              }
+            } else {
+              slog('staking.Reward: skipping ' + stash)
+            }
+          })
+        }
+      }
+
       if (event.section.toUpperCase() === 'STAKERSELECTED'
       || event.method.toUpperCase() === 'STAKERSELECTED') {
       // Show what we are busy with
@@ -274,7 +312,7 @@ bot.on('error', (err) => {
       slog('Updating candidates...')
       try {
         // const res = await axios.get('https://kusama.w3f.community/candidates')
-        const res = await axios.get(config.update_url)
+        const res = await axios.get(config.candidates_url)
         if (res.data) {
           if (res.data.updatedAt) {
             // we're getting from our own cache
@@ -292,6 +330,24 @@ bot.on('error', (err) => {
       } catch (err) {
         slog('AXIOS error: ' + JSON.stringify(err.res ? err.res : err))
         console.debug(err)
+      }
+      // check if candidates are nominated
+      try {
+        const res = await axios.get(config.nominators_url)
+        if (res.data) {
+          state.nominators = res.data
+          state.nominators.forEach(n => {
+            n.current.forEach(c => {
+              const idx = state.candidates.findIndex(f => f.stash === c.stash)
+              state.candidates[idx].nominated = (idx > -1) ? true : false
+            })
+          })
+          saveState()
+        }
+      } catch (err) {
+        // slog(res)
+        slog('Error fetching nominators')
+        console.error(err)
       }
       // check if candidates are queued for next session
       slog('Checking if queued for next session')
