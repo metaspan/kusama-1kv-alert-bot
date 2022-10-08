@@ -248,7 +248,7 @@ bot.on('error', (err) => {
           const amount = event.data[1]
           state.subscribers.forEach(sub => {
           // const c = state.candidates.find(f => f.stash === stash)
-          if (sub.targets.includes(stash)) {
+          if (sub.targets?.find(target => target.stash === stash)) {
             // const t = sub.targets[stash]
             try {
               bot.createMessage(
@@ -270,31 +270,61 @@ bot.on('error', (err) => {
             slog('staking.Reward: skipping ' + stash)
           }
         })
-      }
-    }
+      }}
 
-    if (event.section.toUpperCase() === 'STAKERSELECTED'
-     || event.method.toUpperCase() === 'STAKERSELECTED') {
-      // Show what we are busy with
-      slog(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
-      bot.createMessage(
-      '983358544650858507',
-      'Seems we have Event:'
-        + `at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
-        + `\t${event.section}:${event.method}:: (phase=${phase.toString()})`
-      )
-      // console.log(`\t\t${event.meta.documentation?.toString()}`)
-  
-      // Loop through each of the parameters, displaying the type and data
-      event.data.forEach((data, index) => {
-        slog(`\t\t\t${types[index].type}: ${data.toString()}`);
-      })
-      // } else {
-      //   console.log(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
+      if (event.section.toUpperCase() === 'STAKERSELECTED'
+       || event.method.toUpperCase() === 'STAKERSELECTED') {
+        // Show what we are busy with
+        slog(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
+        bot.createMessage(
+        '983358544650858507',
+        'Seems we have Event:'
+          + `at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
+          + `\t${event.section}:${event.method}:: (phase=${phase.toString()})`
+        )
+        // console.log(`\t\t${event.meta.documentation?.toString()}`)
+    
+        // Loop through each of the parameters, displaying the type and data
+        event.data.forEach((data, index) => {
+          slog(`\t\t\t${types[index].type}: ${data.toString()}`);
+        })
+        // } else {
+        //   console.log(`\t${event.section}:${event.method}:: (phase=${phase.toString()})`)
       }
+
+      // staking-miner submits electionProviderMultiPhase.submit
+      if (event.section === 'electionProviderMultiPhase') {
+        // && event.method.toUpperCase() === 'SUBMIT') {
+        // console.log(event.section, event.method, phase.toString())
+        console.log(event.toString(), phase.toString())
+        switch (event.method) {
+          case 'ElectionFailed':     // ElectionFailed()
+          case 'ElectionFinalized':  // ElectionFinalized(PalletElectionProviderMultiPhaseElectionCompute, SpNposElectionsElectionScore)
+          // {"index":"0x2501","data":["Signed",{"minimalStake":"0x000000000000000000163325867f3357","sumStake":"0x000000000000000061e9c3af92229491","sumStakeSquared":"0x0009d95026bf45cf04a5bc976b46bc7b"}]}
+          case 'Slashed':            // Slashed(AccountId32, u128)
+            break
+          case 'Rewarded':           // Rewarded(AccountId32, u128)
+          // {"index":"0x2503","data":["H2LjzjkgpyUiNeazaBxVNjTujzUEgCJKGJ5VykHsj3JD5rx",100000000000]}
+          case 'SignedPhaseStarted': // SignedPhaseStarted(u32)
+          // {"index":"0x2505","data":[2301]}
+          case 'SolutionStored':     // SolutionStored(PalletElectionProviderMultiPhaseElectionCompute, bool)
+          // {"index":"0x2500","data":["Signed",false]}
+          case 'UnsignedPhaseStarted': // UnsignedPhaseStarted(u32)
+          // {"index":"0x2506","data":[2301]}
+          default:
+            bot.createMessage(
+              '983358544650858507',
+              `${event.section}.${event.method}: at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
+                + `\n(phase=${phase.toString()})`
+                + '\n' + JSON.stringify(event)
+            )
+        }
+      } // end of electionProviderMultiPhase.submit
+
     })
+
   }) // End of Event Loop
-  
+
   setInterval(async () => {
     slog('=== Interval starts...')
     // do we have any subscribers that need updated candidates data?
@@ -370,7 +400,7 @@ bot.on('error', (err) => {
       let age = moment().diff(moment(sub.updatedAt), 'seconds')
       slog(`id: ${sub.id}, age: ${age}, updateAt ${sub.updatedAt}`)
       if (sub.updatedAt === '' || sub.updatedAt === undefined || age > sub.interval) {
-        sub.targets.forEach( t => {
+        sub.targets?.forEach( t => {
         const c = new Candidate(state.candidates.find(c => c.stash === t.stash))
         if (c) {
           // // const wasValid = c.valid
