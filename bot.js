@@ -5,9 +5,6 @@ import fs from 'fs'
 import { ApiPromise, WsProvider } from '@polkadot/api'
 import { Candidate } from './candidate.js'
 
-import { DockAPI } from '@docknetwork/sdk'
-const dock = new DockAPI()
-
 import { Queue, Job } from 'bullmq'
 const qOpts = {
   // connection to Redis
@@ -252,7 +249,7 @@ bot.on('error', (err) => {
 
 (async () => {
   const wsProvider = new WsProvider(config.validator_url)
-  const api = await ApiPromise.create({ provider: wsProvider })
+  const api = await ApiPromise.create({ provider: wsProvider, noInitWarn: true, throwOnConnect: true })
 
   api.query.system.events(async (events) => {
     slog(`Received ${events.length} events:`)
@@ -272,15 +269,18 @@ bot.on('error', (err) => {
                 + `at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
                 + JSON.stringify(event.data)
             )
-            [
-              'w3f_exposures_update',
-              'w3f_nominators_update',
-              'w3f_nominations_update',
-              'w3f_validators_update'
-            ].forEach(async (jobname) => {
-              const q = assert(`q_${jobname}`)
-              const job = await q.add(jobname, { CHAIN: 'kusama' }, { repeat: false, ...jobRetention })
-            })
+            const jobs = await Promise.all([
+              q_w3f_exposures_update.add('w3f_exposures_kusama2', { CHAIN: 'kusama', trigger: 'session.NewSession' }, { repeat: false, ...jobRetention }),
+              q_w3f_nominators_update.add('w3f_nominators_kusama2', { CHAIN: 'kusama', trigger: 'session.NewSession' }, { repeat: false, ...jobRetention }),
+              q_w3f_nominations_update.add('w3f_nominations_kusama2', { CHAIN: 'kusama', trigger: 'session.NewSession' }, { repeat: false, ...jobRetention }),
+              q_w3f_validators_update.add('w3f_validators_kusama2', { CHAIN: 'kusama', trigger: 'session.NewSession' }, { repeat: false, ...jobRetention }),
+            ])
+            bot.createMessage(
+              config.channel_id, // send to me 
+              `Created new jobs `
+                + `at ${moment().format('YYYY.MM.DD HH:mm:ss')}`
+                + ` raised ${jobs.length} jobs`
+            )
             break
           default:
 
