@@ -1,5 +1,9 @@
 # kusama-1kv-alert-bot
 
+!! This repo is archived !!
+
+Follow here if you want the latest updates: https://github.com/metaspan/dotsama-alert-bots
+
 Use this bot to notify you of valid / active status on Kusama 1KV
 
 ## Getting started
